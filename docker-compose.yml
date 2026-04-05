@@ -1,0 +1,57 @@
+version: "3.9"
+
+services:
+  discovery-server:
+    build:
+      context: ./discovery-server
+    container_name: discovery-server
+    ports:
+      - "8761:8761"
+
+  mongodb:
+    image: mongo:7
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  movie-info-service:
+    build:
+      context: ./movie-info-service
+    container_name: movie-info-service
+    depends_on:
+      - discovery-server
+      - mongodb
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka
+      SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/movie-info-db
+    ports:
+      - "8082:8082"
+
+  ratings-data-service:
+    build:
+      context: ./ratings-data-service
+    container_name: ratings-data-service
+    depends_on:
+      - discovery-server
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka
+    ports:
+      - "8083:8083"
+
+  movie-catalog-service:
+    build:
+      context: ./movie-catalog-service
+    container_name: movie-catalog-service
+    depends_on:
+      - discovery-server
+      - movie-info-service
+      - ratings-data-service
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka
+    ports:
+      - "8081:8081"
+
+volumes:
+  mongo_data:
