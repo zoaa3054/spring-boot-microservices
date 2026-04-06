@@ -28,21 +28,33 @@ public class MovieResource {
         this.movieCacheRepository = movieCacheRepository;
     }
 
-    @RequestMapping("/{movieId}")
-    public Movie getMovieInfo(@PathVariable("movieId") String movieId) {
-        return movieCacheRepository.findByMovieId(movieId)
-                .map(cached -> new Movie(cached.getMovieId(), cached.getTitle(), cached.getDescription()))
-                .orElseGet(() -> {
-                    final String url = "https://api.themoviedb.org/3/movie/" + movieId + "?api_key=" + apiKey;
-                    MovieSummary movieSummary = restTemplate.getForObject(url, MovieSummary.class);
+    @RequestMapping("/{movieId}/{cacheEnabled}")
+    public Movie getMovieInfo(@PathVariable("movieId") String movieId, @PathVariable("cacheEnabled") boolean cacheEnabled) {
+        if (cacheEnabled) {
+            return movieCacheRepository.findByMovieId(movieId)
+                    .map(cached -> new Movie(cached.getMovieId(), cached.getTitle(), cached.getDescription()))
+                    .orElseGet(() -> fetchMovieFromTMDB(movieId, true));
+        } else {
+            return fetchMovieFromTMDB(movieId, false);
+        }
+    }
 
-                    if (movieSummary == null) {
-                        return new Movie(movieId, "Unknown", "No description available.");
-                    }
+    private Movie fetchMovieFromTMDB(String movieId, boolean saveToCache) {
+        final String url = "https://api.themoviedb.org/3/movie/" + movieId + "?api_key=" + apiKey;
+        MovieSummary movieSummary = restTemplate.getForObject(url, MovieSummary.class);
 
-                    Movie movie = new Movie(movieId, movieSummary.getTitle(), movieSummary.getOverview());
-                    movieCacheRepository.save(new CachedMovie(movieId, movie.getName(), movie.getDescription()));
-                    return movie;
-                });
+        if (movieSummary == null) {
+            return new Movie(movieId, "Unknown", "No description available.");
+        }
+
+        Movie movie = new Movie(movieId, movieSummary.getTitle(), movieSummary.getOverview());
+        if (saveToCache) {
+            try {
+                movieCacheRepository.save(new CachedMovie(movieId, movie.getName(), movie.getDescription()));
+            } catch (com.mongodb.MongoWriteException | org.springframework.dao.DuplicateKeyException e) {
+                // Ignore duplicate key errors - it just means another thread cached the movie first
+            }
+        }
+        return movie;
     }
 }
