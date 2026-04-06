@@ -1,9 +1,10 @@
 package com.example.movieinfoservice.resources;
 
+import com.example.movieinfoservice.models.CachedMovie;
 import com.example.movieinfoservice.models.Movie;
 import com.example.movieinfoservice.models.MovieSummary;
+import com.example.movieinfoservice.repositories.MovieCacheRepository;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -19,31 +20,29 @@ public class MovieResource {
     @Value("${api.key}")
     private String apiKey;
 
-    private RestTemplate restTemplate;
+    private final RestTemplate restTemplate;
+    private final MovieCacheRepository movieCacheRepository;
 
-    public MovieResource(RestTemplate restTemplate) {
+    public MovieResource(RestTemplate restTemplate, MovieCacheRepository movieCacheRepository) {
         this.restTemplate = restTemplate;
+        this.movieCacheRepository = movieCacheRepository;
     }
 
     @RequestMapping("/{movieId}")
     public Movie getMovieInfo(@PathVariable("movieId") String movieId) {
-        // Get the movie info from TMDB
-        final String url = "https://api.themoviedb.org/3/movie/" + movieId + "?api_key=" + apiKey;
-        MovieSummary movieSummary;
-        try {
-            movieSummary = restTemplate.getForObject(url, MovieSummary.class);
-        } catch (HttpClientErrorException.NotFound ex) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Movie not found");
-        } catch (HttpClientErrorException ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "TMDB request failed");
-        } catch (RestClientException ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "TMDB service is unavailable");
-        }
+        return movieCacheRepository.findByMovieId(movieId)
+                .map(cached -> new Movie(cached.getMovieId(), cached.getTitle(), cached.getDescription()))
+                .orElseGet(() -> {
+                    final String url = "https://api.themoviedb.org/3/movie/" + movieId + "?api_key=" + apiKey;
+                    MovieSummary movieSummary = restTemplate.getForObject(url, MovieSummary.class);
 
-        if (movieSummary == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Invalid TMDB response");
-        }
+                    if (movieSummary == null) {
+                        return new Movie(movieId, "Unknown", "No description available.");
+                    }
 
-        return new Movie(movieId, movieSummary.getTitle(), movieSummary.getOverview());
+                    Movie movie = new Movie(movieId, movieSummary.getTitle(), movieSummary.getOverview());
+                    movieCacheRepository.save(new CachedMovie(movieId, movie.getName(), movie.getDescription()));
+                    return movie;
+                });
     }
 }
