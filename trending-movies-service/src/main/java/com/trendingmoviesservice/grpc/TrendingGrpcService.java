@@ -1,14 +1,12 @@
 package com.trendingmoviesservice.grpc;
 
-import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Component;
 
-import com.trendingmoviesservice.models.RatingData;
-import com.trendingmoviesservice.services.RatingsDataClient;
+import com.trendingmoviesservice.services.TrendingRatingsQueryService;
+import com.trendingmoviesservice.services.TrendingRatingsQueryService.TrendingResultRow;
 
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
@@ -18,31 +16,23 @@ public class TrendingGrpcService extends TrendingServiceGrpc.TrendingServiceImpl
 
     private static final int TOP_N = 10;
 
-    private final RatingsDataClient ratingsDataClient;
+        private final TrendingRatingsQueryService trendingRatingsQueryService;
 
-    public TrendingGrpcService(RatingsDataClient ratingsDataClient) {
-        this.ratingsDataClient = ratingsDataClient;
+        public TrendingGrpcService(TrendingRatingsQueryService trendingRatingsQueryService) {
+                this.trendingRatingsQueryService = trendingRatingsQueryService;
     }
 
     @Override
     public void getTopTrendingMovies(TopTrendingMoviesRequest request,
                                      StreamObserver<TopTrendingMoviesResponse> responseObserver) {
         try {
-            List<RatingData> ratings = ratingsDataClient.getAllRatings();
+            List<TrendingResultRow> queryRows = trendingRatingsQueryService.getTopTrendingMovies(TOP_N);
 
-            Map<String, Double> averageByMovie = ratings.stream()
-                    .collect(Collectors.groupingBy(
-                            RatingData::getMovieId,
-                            Collectors.averagingInt(RatingData::getRating)
-                    ));
-
-            List<TrendingMovie> topMovies = averageByMovie.entrySet().stream()
-                    .sorted(Map.Entry.<String, Double>comparingByValue(Comparator.reverseOrder())
-                            .thenComparing(Map.Entry.comparingByKey()))
+            List<TrendingMovie> topMovies = queryRows.stream()
                     .limit(TOP_N)
-                    .map(entry -> TrendingMovie.newBuilder()
-                            .setMovieId(entry.getKey())
-                            .setAverageRating(entry.getValue())
+                    .map(row -> TrendingMovie.newBuilder()
+                            .setMovieId(row.getMovieId())
+                            .setAverageRating(row.getAverageRating())
                             .build())
                     .collect(Collectors.toList());
 

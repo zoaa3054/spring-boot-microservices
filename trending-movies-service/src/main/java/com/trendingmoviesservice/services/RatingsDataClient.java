@@ -17,7 +17,7 @@ public class RatingsDataClient {
     private final RestTemplate restTemplate;
     private final String ratingsServiceBaseUrl;
 
-    public RatingsDataClient(@Value("${ratings.service.base-url}") String ratingsServiceBaseUrl) {
+    public RatingsDataClient(@Value("${ratings.service.base-url:http://localhost:8083}") String ratingsServiceBaseUrl) {
         this.restTemplate = new RestTemplate();
         this.ratingsServiceBaseUrl = ratingsServiceBaseUrl;
     }
